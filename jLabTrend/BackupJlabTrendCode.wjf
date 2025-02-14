@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<winzipjob version="3">
+<wizard usevars="no"/>
+<items>
+<filter exclude="no">*.*</filter>
+<filter exclude="yes">*.zip</filter>
+<item exclude="no" recurse="yes">C:\codeDev\jLabTrend\</item>
+<item exclude="yes" recurse="yes">C:\codeDev\jLabTrend\target\</item>
+</items>
+<output>
+<name append="dateyyyy">JLabTrendCode.zip</name>
+<folder append="none">E:\codeDevBackups\jLabTrend\code\</folder>
+<log type="none"/>
+</output>
+<options>
+<flags>0001</flags>
+<compression type="max"/>
+<span mode="auto"/>
+<split unit="byte">0</split>
+<encryption mode="none" method="none"/>
+<recycle>no</recycle>
+<folders mode="relative"/>
+<cd speed="default" finalize="yes"/>
+</options>
+<email>
+<mailitem options="0">
+<sendto/>
+<subject type="ok"/>
+<subject type="error"/>
+</mailitem>
+</email>
+<cloud>
+<entry options="0">
+<provider>0</provider>
+<location/>
+</entry>
+</cloud>
+</winzipjob>
