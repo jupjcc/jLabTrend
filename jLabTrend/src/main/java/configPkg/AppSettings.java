@@ -41,7 +41,7 @@ public class AppSettings {
          .setPrettyPrinting()
          .create();
       settingsFileName = configPkg.AppPaths.CFG_PATH + "settings.json";
-      initMsg = "Reading program settings from " + settingsFileName + "\n";
+      initMsg = "Reading saved app settings from " + settingsFileName + "\n";
       try {
          Reader jr = Files.newBufferedReader(Paths.get(settingsFileName));
          try

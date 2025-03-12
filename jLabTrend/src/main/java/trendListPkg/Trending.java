@@ -14,11 +14,11 @@ public class Trending {
    public Trending() {
       String prevName = "?";
       System.out.println("Trending List contains " + 
-                        LabTrend.readings.size() + " readings");
+                        LabTrend.Imports.readings.size() + " readings");
       trendList.clear();
       TrendListItem tli = null;
-      for (int re = 0; re < LabTrend.readings.size(); re++) {
-         Reading rding = LabTrend.readings.get(re);
+      for (int re = 0; re < LabTrend.Imports.readings.size(); re++) {
+         Reading rding = LabTrend.Imports.readings.get(re);
          if (!rding.data.name.equalsIgnoreCase(prevName)) {
             // a name not encountered before; add new item
             tli = new TrendListItem(rding.data.name, rding);

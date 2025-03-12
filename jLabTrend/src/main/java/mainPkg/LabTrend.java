@@ -9,11 +9,8 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.ListIterator;
 import java.util.Locale;
 
 import org.eclipse.swt.SWT;
@@ -36,8 +33,8 @@ import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
+import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
-import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.MessageBox;
@@ -51,7 +48,6 @@ import org.eclipse.swtchart.IAxisSet;
 import org.eclipse.swtchart.IAxisTick;
 import org.eclipse.swtchart.ILegend;
 import org.eclipse.swtchart.ILineSeries;
-import org.eclipse.swtchart.ILineSeries.PlotSymbolType;
 import org.eclipse.swtchart.ISeries.SeriesType;
 import org.eclipse.swtchart.ISeriesSet;
 import org.eclipse.wb.swt.SWTResourceManager;
@@ -63,6 +59,7 @@ import dataEnumerations.Colors;
 import importPkg.ImportFromHtml;
 import importPkg.Reading;
 import importPkg.ReportFile;
+import importPkg.ReportFiles;
 import trendListPkg.TrendItemSelector;
 import trendListPkg.TrendListItem;
 import trendListPkg.Trending;
@@ -81,6 +78,7 @@ import utilsPkg.Utils;
  *        Save As Web Page .mhtml file
  * Decisions on what kind of file to use for input:
  *  Revisions:
+ *  20250306: auto-select all files in folder
  *  20250106: added import of xlsx file manually created from paper report 
  *  20240510 Added import of Labcorp files from Portal Messages
  *  20231207 Output text amounts to accounts section of SetupDisplay tab
@@ -96,22 +94,15 @@ import utilsPkg.Utils;
  *                
  */
 public class LabTrend extends Shell {
-   public static String PROG_ID = "jLabTrend History of Lab Results v3.0 20250214";
+   public static String PROG_ID = "jLabTrend History of Lab Results v3.0 20250311";
    final static int TAB_IMPORT_DATA = 0;
    final static int TAB_TRENDING = 1;
    final static int TAB_CHARTS = 2;
-   static final String DESCRIBE_LAB_REPORT_FILES =
-         "This app summarizes LABORATORY results from lab report file(s) " +
-         "provided on the Blue Ridge Premier Medicine patient portal.\n" +
-         "The files are imported to local storage via the Messages section\n" +
-         "of the Patient Portal\n";
-   public static ArrayList<ReportFile> reportFilesList = new ArrayList<ReportFile>();
-   private static String []reportFileNames = null;
-   public static ArrayList<Reading> readings = new ArrayList<Reading>();
 
    final static String TAB_IMPORT_DATA_STR = "ImportedData";
    final static String TAB_TRENDING_STR = "TrendingItems";
    final static String TAB_CHARTS_STR = "Charts";
+   public static ReportFiles Imports;
    public static ImportFromHtml impFromHtml;
    public static OpMsgLogger OpMsgLog;
    public static AppSettings settings;
@@ -126,8 +117,7 @@ public class LabTrend extends Shell {
    static Button []rdoSelFile;
    static Text txtFocusFilesHdr;
    static Button btnNewFile;
-   static Button btnAddNewFiles;
-   static Button btnClearFiles;
+   static Button btnSetImportFolder;
    static Button rdoAllTrending;
    static Button rdoAnyAbnormal;
    static Button rdoRecentAbnormal;
@@ -139,6 +129,8 @@ public class LabTrend extends Shell {
    static Button btnUpdateChart;
    static Label lblNumSel;
    static LocalDate refDate;
+   static String impFolder;
+
 //   static WaitAndNotify xlFileOk = null;
    static TabFolder tabFolder;
    static TabItem tabImportData;
@@ -198,6 +190,8 @@ public class LabTrend extends Shell {
    private Composite cmpUpdateHistory;
    
    DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd").withLocale(Locale.ENGLISH);
+   private Composite cmpImportFolder;
+   private static Text txtImportFolder;
    //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
    /**
     * Launch the application.
@@ -234,24 +228,21 @@ public class LabTrend extends Shell {
          selectTab(TAB_IMPORT_DATA_STR);
          
          OpMsgLog.LogMsg(PROG_ID + "\n");
-         
-         //  load the focus file list with saved settings
-         if (AppSettings.sData.SavedImportFilesList != null &&
-               AppSettings.sData.SavedImportFilesList.length > 0 &&
-               AppSettings.sData.SavedImportFilesList[0] != null) {
-            OpMsgLog.LogMsg("Retrieving report file names from last session:\n",
-                  OpMsgLogger.LogLevel.INFO, true);
-            reportFileNames = AppSettings.sData.SavedImportFilesList; 
-            for (int ifn = 0; ifn < reportFileNames.length; ifn++) {
-               reportFilesList.add(new ReportFile(reportFileNames[ifn]));
+         impFolder = AppSettings.sData.importFilesFolder;
+         loadReports();
+         if (Imports.reports.size() > 0) {
+            MessageBox msgbox = 
+                  new MessageBox(shlMain, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
+            msgbox.setMessage(PROG_ID + "\nYour previous imports folder" +
+                  "\n" + impFolder + "\ncontains " +
+                  Imports.reports.size() + " reports.");
+            msgbox.setText("Read reports from the same folder again?");
+            int ret = msgbox.open();
+            if (ret != SWT.YES) {      
+               setNewImportFolder();
             }
-            loadReports();
-            showFocusReport(reportFilesList.get(0));
-            OpMsgLog.LogMsg("Click on file for (focus) details'\n",
-                  OpMsgLogger.LogLevel.PROMPT, true);
-            cmpCtrlDisp.setEnabled(true);   // enabled when file(s) selected
-         } else {}
-         tabFolder.setSelection(tabImportData);
+         }     // if reports.size > 0
+//         trending = new Trending();
          captureOk = false;
          while (!shlMain.isDisposed()) {
             if (!display.readAndDispatch()) {
@@ -280,7 +271,7 @@ public class LabTrend extends Shell {
    }
 
    public static void SelectFocusFile(int fileNum) {
-      showFocusReport(reportFilesList.get(fileNum));
+      showFocusReport(Imports.reports.get(fileNum));
    }
    
    private static void clearFileListPanel() {
@@ -293,17 +284,21 @@ public class LabTrend extends Shell {
          for (int c = 0; c < child.length; c++) {
             child[c].dispose();
          }
-      }
-   }
-   private static void clearTrendItemSels() {
-      if (cmpTrendList != null) {
-         Control []child = cmpTrendList.getChildren();
+         child = cmpTrendList.getChildren();
          for (int c = 0; c < child.length; c++) {
-            child[c].dispose();;
-         }
-         chartItems.clear();
+            child[c].dispose();
+         }         
       }
    }
+//   private static void clearTrendItemSels() {
+//      if (cmpTrendList != null) {
+//         Control []child = cmpTrendList.getChildren();
+//         for (int c = 0; c < child.length; c++) {
+//            child[c].dispose();;
+//         }
+//         chartItems.clear();
+//      }
+//   }
    private static int numTrendSelections() {
       int ret = 0;
       for (int t = 0; t < trending.trendList.size(); t++) {
@@ -351,101 +346,6 @@ public class LabTrend extends Shell {
 //      }
 //   }
 //   
-   private static void loadReports() {
-      clearFileListPanel();
-      if (trending != null) {
-         trending = null;
-      }
-      if (cmpSelectFocus == null) {
-         cmpSelectFocus = new CmpSelectFocus(grpSelectFiles, SWT.NONE);
-      }
-      if (reportFilesList.size() == 0) {
-         AppSettings.sData.SavedImportFilesList = null;
-      } else {
-         AppSettings.sData.SavedImportFilesList = new String[reportFilesList.size()];
-         for (int r = 0; r < reportFilesList.size(); r++) {
-            ReportFile rf = reportFilesList.get(r);
-            try {
-               rf.load(true);    // get date only for sorting
-            } catch (Exception re) {
-               OpMsgLog.LogMsg("Error reading collection date from report file:\n" +
-                     rf.fileName +
-                     "\nFile must conform to Labcorp format\n",
-                     OpMsgLogger.LogLevel.ERROR, true);
-               reportFilesList.remove(rf);
-            }
-         }
-         if (reportFilesList.size() > 1) {
-            // sort by collection date/time, reverse chronology
-            Collections.sort(reportFilesList);
-         }
-         // now that file names are sorted, load the readings
-         for (int r = 0; r < reportFilesList.size(); r++) {
-            ReportFile rf = reportFilesList.get(r);
-            try {
-               rf.load(false);
-            } catch (Exception re) {
-                OpMsgLog.LogMsg(Utils.ExceptionString(re) + "\nError loading readings from file: " +
-                  rf.fileName + "\n", OpMsgLogger.LogLevel.ERROR, true);
-            }
-            AppSettings.sData.SavedImportFilesList[r] = rf.fileName;
-         }
-         if (readings.size() > 1) {
-            // sort the readings by name
-            Collections.sort(readings, new Comparator<Reading>() {
-               @Override
-               public int compare(Reading t1, Reading t2) {
-                  String name1 = ((Reading)t1).data.name.trim().toLowerCase();
-                  String name2 = ((Reading)t2).data.name.trim().toLowerCase();
-                  // f1.compareTo(f2) for increasing date/time, else decreasing
-                  return name1.compareTo(name2);
-               }
-            });
-         }
-         txtFocusFilesHdr.setText("      Collected              File");
-         focusFileSelectors = new FocusFileSelector[reportFilesList.size()];
-         for (int rfi = 0; rfi < reportFilesList.size(); rfi++) {
-            ReportFile rf = reportFilesList.get(rfi);
-            String id = rf.collectionDateTime + " " + rf.fileName;
-            focusFileSelectors[rfi] = new FocusFileSelector(cmpFileList, id, rfi);
-//            new focusFileSelectors(cmpFileList, id, rfi);
-//            for (int itm = 0; itm < reportFilesList.get(rfi).rptItems.size(); itm++) {
-//               trending.AddTrendItem(rf, reportFilesList.get(rfi).rptItems.get(itm));
-//            }
-         }
-         cmpFileList.pack();
-         cmpFileList.layout();
-         trending = new Trending();
-         /*
-         System.out.println("Trend Items with parent files:");
-         for (int tItm = 0; tItm < trending.size(); tItm++) {
-            String il = trending.get(tItm).item.itemLine();
-            il = il.substring(0, il.length()-1);
-            System.out.println(il + ", file(s):");
-            int nFiles = trending.get(tItm).parentFiles.size();
-            for (int pf = 0; pf < nFiles; pf++) {
-               System.out.println("   " + trending.get(tItm).
-                                 parentFiles.get(pf).fileName);
-            }
-         }
-         */
-         cmpTrendList.setVisible(true);
-         GridData gd_TrendItmList = new GridData(SWT.FILL, SWT.FILL, true, false, 1, 1);
-         gd_TrendItmList.heightHint = 18;
-         cmpTrendList.setLayoutData(gd_TrendItmList);
-         
-         trendItemSelectors = new TrendItemSelector[trending.trendList.size()];
-         for (int t = 0; t < trending.trendList.size(); t++) {
-            TrendListItem tli = trending.trendList.get(t);
-            trendItemSelectors[t] = new TrendItemSelector(cmpTrendList, tli.grpName, t);
-         }
-         
-         cmpTrendList.pack();
-         cmpTrendList.layout();
-      }     // end else reportFiles size > 0
-//      int bp=1;    // debug breakpoint
-   }     // end loadReports
-
 //   private static void enableTrendingSelection() {
 //      boolean enable;
 //      if ((trendItemSelectors |= null) && trending.trendList.size() > 0) {
@@ -510,8 +410,8 @@ public class LabTrend extends Shell {
          cmpItm = null;
       }
       ArrayList<Reading> focusReadings = new ArrayList<Reading>();
-      for (int ir = 0; ir < readings.size(); ir++) {
-         Reading rd = readings.get(ir);
+      for (int ir = 0; ir < Imports.readings.size(); ir++) {
+         Reading rd = Imports.readings.get(ir);
          if (rd.rptFile == rpt) {
             focusReadings.add(rd);
          }
@@ -570,111 +470,49 @@ public class LabTrend extends Shell {
       grpSelectFiles.setLayout(new FormLayout());
       FormData fd_grpSelectFiles = new FormData();
       fd_grpSelectFiles.top = new FormAttachment(0);
-      fd_grpSelectFiles.bottom = new FormAttachment(28);
+      fd_grpSelectFiles.bottom = new FormAttachment(36);
       fd_grpSelectFiles.left = new FormAttachment(0);
       fd_grpSelectFiles.right = new FormAttachment(100);
       grpSelectFiles.setLayoutData(fd_grpSelectFiles);
-      grpSelectFiles.setText("Loaded Report File(s)");
+      grpSelectFiles.setText("Report File(s)");
       
-      btnAddNewFiles = new Button(grpSelectFiles, SWT.NONE);
-      FormData fd_btnAddNewFiles = new FormData();
-      fd_btnAddNewFiles.bottom = new FormAttachment(0, 18);
-      fd_btnAddNewFiles.top = new FormAttachment(0);
-      fd_btnAddNewFiles.left = new FormAttachment(0, 140);
-      fd_btnAddNewFiles.right = new FormAttachment(0, 260);
-      btnAddNewFiles.setLayoutData(fd_btnAddNewFiles);
-      btnAddNewFiles.setTouchEnabled(true);
-      btnAddNewFiles.setSize(50, 25);
-      btnAddNewFiles.setToolTipText("Browse for existing file(s)");
-      btnAddNewFiles.setText("Add new report File(s)");
-      btnAddNewFiles.addSelectionListener(new SelectionAdapter() {
+      cmpImportFolder = new Composite(grpSelectFiles, SWT.NONE);
+      GridLayout gl_cmpImportFolder = new GridLayout(3, false);
+      gl_cmpImportFolder.marginWidth = 0;
+      gl_cmpImportFolder.marginHeight = 0;
+      cmpImportFolder.setLayout(gl_cmpImportFolder);
+      FormData fd_cmpImportFolder = new FormData();
+      fd_cmpImportFolder.bottom = new FormAttachment(0, 30);
+      fd_cmpImportFolder.left = new FormAttachment(0, 1);
+      fd_cmpImportFolder.top = new FormAttachment(0, 4);
+      fd_cmpImportFolder.right = new FormAttachment(100, -1);
+      cmpImportFolder.setLayoutData(fd_cmpImportFolder);
+      Label lblFromfolder = new Label(cmpImportFolder, SWT.BORDER);
+      lblFromfolder.setLayoutData(new GridData(SWT.CENTER, SWT.CENTER, false, false, 1, 1));
+      lblFromfolder.setBounds(0, 0, 61, 15);
+      lblFromfolder.setText("Folder");
+      btnSetImportFolder = new Button(cmpImportFolder, SWT.NONE);
+      btnSetImportFolder.setTouchEnabled(true);
+      btnSetImportFolder.setToolTipText("New");
+      btnSetImportFolder.setText("New");
+      btnSetImportFolder.setToolTipText("Load lab report files from a different folder");
+      btnSetImportFolder.addSelectionListener(new SelectionAdapter() {
          @Override
          public void widgetSelected(SelectionEvent e) {
-            OpMsgLog.LogMsg("Select focus file by clicking its button\n", 
-                        OpMsgLogger.LogLevel.PROMPT, true);
-//            boolean filesSelected = false;
-            FileDialog fd = new FileDialog(shlMain, SWT.MULTI);
-            fd.setFilterPath(AppSettings.sData.importFilesFolder);
-            fd.setText("Select file(s) containing lab results");
-            fd.setFilterNames(new String[] {
-                  "Webpage,single file(*.mhtml)", 
-                  "Webpage,complete(*.htm*)",
-                  "Excel from Quest(*.xlsx)"});
-            fd.setFilterExtensions(new String[] {"*.mhtml",
-                                                 "*.htm*",
-                                                 "*.xlsx"});
-            if (fd.open() != null) {
-               txtFocusFilesHdr.setText("");
-               String []fdFileNames = fd.getFileNames();
-               AppSettings.sData.importFilesFolder = fd.getFilterPath();
-               for (int f = 0; f < fdFileNames.length; f++) {
-                  String newFileName = fd.getFilterPath() + "\\" + fdFileNames[f];
-                  ListIterator<ReportFile> itr = reportFilesList.listIterator();
-                  boolean loaded = false;
-                  while (itr.hasNext()) {
-                     String oldFileName = itr.next().fileName;
-                     if (newFileName.equals(oldFileName)) {
-                        OpMsgLog.LogMsg(oldFileName + " is already loaded\n");
-                        loaded = true;
-                        break;
-                     }
-                  }
-                  if (!loaded) {
-                     reportFilesList.add(new ReportFile(newFileName));
-                  }
-               }
-//               filesSelected = true;
-               loadReports();
-            }
-            if (reportFilesList.size() > 0) {
-               showFocusReport(reportFilesList.get(0));
-               // 20240624: note there is no way to grey out (disable) tabItems in SWT
-               //  but you can dispose it without disposing its control
-               if (tabTrending.isDisposed()) {
-                  tabTrending = new TabItem(tabFolder, SWT.NONE, TAB_TRENDING);
-                  tabTrending.setText("TrendingItems");
-                  tabTrending.setControl(cmpCtrlDisp);
-               }
-            } else {
-               MessageBox msgbox = 
-                     new MessageBox(shlMain, SWT.ICON_ERROR | SWT.YES | SWT.NO);
-               msgbox.setText("You haven't selected any reports");
-               msgbox.setMessage("Do you want to retry?");
-               int ret = msgbox.open();
-               if (ret != SWT.YES) {
-                  shlMain.dispose();
-                  System.exit(0);
-               }
-            }
+            setNewImportFolder();
+            loadReports();
          }
       });
-      btnClearFiles = new Button(grpSelectFiles, SWT.NONE);
-      FormData fd_btnClearFiles = new FormData();
-      fd_btnClearFiles.bottom = new FormAttachment(0, 18);
-      fd_btnClearFiles.top = new FormAttachment(0);
-      fd_btnClearFiles.left = new FormAttachment(0, 320);
-      btnClearFiles.setLayoutData(fd_btnClearFiles);
-      btnClearFiles.setTouchEnabled(true);
-      btnClearFiles.setSize(50, 25);
-      btnClearFiles.setToolTipText("Clear file selections");
-      btnClearFiles.setText("Clear file selections");
-      btnClearFiles.addSelectionListener(new SelectionAdapter() {
-         @Override
-         public void widgetSelected(SelectionEvent e) {
-            tabTrending.dispose();
-            txtFocusFilesHdr.setText("none");
-            clearTrendItemSels();
-            clearFileListPanel();
-            clearTrendingDetails();
-            reportFilesList.clear();
-            readings.clear();
-         }
-      });
+      txtImportFolder = new Text(cmpImportFolder, SWT.BORDER);
+      txtImportFolder.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false, 1, 1));
+      txtImportFolder.setEditable(false);
+      txtImportFolder.setBounds(0, 0, 76, 21);
+      
       txtFocusFilesHdr = new Text(grpSelectFiles, SWT.BORDER | SWT.READ_ONLY);
       FormData fd_txtFocusFilesHdr = new FormData();
-      fd_txtFocusFilesHdr.bottom = new FormAttachment(0, 36);
-      fd_txtFocusFilesHdr.right = new FormAttachment(0, 542);
-      fd_txtFocusFilesHdr.top = new FormAttachment(0, 18);
+      fd_txtFocusFilesHdr.bottom = new FormAttachment(0, 54);
+      fd_txtFocusFilesHdr.right = new FormAttachment(100, -1);
+      fd_txtFocusFilesHdr.top = new FormAttachment(0, 32);
       fd_txtFocusFilesHdr.left = new FormAttachment(0);
       txtFocusFilesHdr.setLayoutData(fd_txtFocusFilesHdr);
       txtFocusFilesHdr.setFont(SWTResourceManager.getFont("Courier New", 9, SWT.NORMAL));
@@ -682,7 +520,7 @@ public class LabTrend extends Shell {
   
       cmpSelectFocus = new CmpSelectFocus(grpSelectFiles, SWT.NONE);
       FormData fd_cmpSelectFocus = new FormData();
-      fd_cmpSelectFocus.top = new FormAttachment(0, 36);
+      fd_cmpSelectFocus.top = new FormAttachment(0, 52);
       fd_cmpSelectFocus.bottom = new FormAttachment(100);
       fd_cmpSelectFocus.left = new FormAttachment(0, 1);
       fd_cmpSelectFocus.right = new FormAttachment(100, -2);
@@ -708,7 +546,7 @@ public class LabTrend extends Shell {
       fd_grpFocusReport.left = new FormAttachment(0);
       fd_grpFocusReport.right = new FormAttachment(100);
       fd_grpFocusReport.bottom = new FormAttachment(100);
-      fd_grpFocusReport.top = new FormAttachment(28);
+      fd_grpFocusReport.top = new FormAttachment(36);
       grpFocusReport.setLayoutData(fd_grpFocusReport);
       grpFocusReport.setText("Focus Report File:");
       GridLayout gl_grpFocusReport = new GridLayout(1, false);
@@ -970,6 +808,10 @@ public class LabTrend extends Shell {
       gl_cmpTrendItemsList.marginRight = 0;
       gl_cmpTrendItemsList.verticalSpacing = 0;
       cmpTrendList.setLayout(gl_cmpTrendItemsList);
+      cmpTrendList.setVisible(true);
+      GridData gd_TrendItmList = new GridData(SWT.FILL, SWT.FILL, true, false, 1, 1);
+      gd_TrendItmList.heightHint = 18;
+      cmpTrendList.setLayoutData(gd_TrendItmList);
       scmpTrendItems.setContent(cmpTrendList);
       
 
@@ -1099,12 +941,87 @@ public class LabTrend extends Shell {
       sashForm.setWeights(new int[] {300, 50});
       //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^            
    }     //    end createContents(Display disp)
+
+   static void setNewImportFolder() {      
+      DirectoryDialog dlg = new DirectoryDialog(shlMain);
+      dlg.setFilterPath(impFolder);
+      dlg.setText("Choose folder containing your lab reports");
+      int impSize = 0;
+      MessageBox msgbox;
+      int ret;
+      while (impSize == 0) {
+         impFolder = dlg.open();
+         if (impFolder == null) {
+            msgbox = new MessageBox(shlMain, SWT.ICON_ERROR | SWT.YES | SWT.NO);
+            msgbox.setText("You haven't selected any reports");
+            msgbox.setMessage("Do you want to retry?");
+            ret = msgbox.open();
+            if (ret != SWT.YES) {
+               shlMain.dispose();
+               System.exit(0);
+            }
+         } else {
+            Imports = new ReportFiles(impFolder);
+            loadReports();
+            impSize = Imports.reports.size();
+         }
+      }
+   }  // setNewImportFolder
+   
+   static void loadReports() {
+      Imports = new ReportFiles(impFolder);
+      Imports.LoadReports();
+      if (Imports.reports.size() > 0) {
+         showFocusReport(Imports.reports.get(0));
+         // 20240624: note there is no way to grey out (disable) tabItems in SWT
+         //  but you can dispose it without disposing its control
+         if (tabTrending.isDisposed()) {
+            tabTrending = new TabItem(tabFolder, SWT.NONE, TAB_TRENDING);
+            tabTrending.setText("TrendingItems");
+            tabTrending.setControl(cmpCtrlDisp);
+         }
+        
+         txtImportFolder.setText(impFolder);
+         clearFileListPanel();
+         txtFocusFilesHdr.setText("      Collected@             File");
+         focusFileSelectors = new FocusFileSelector[Imports.reports.size()];
+         for (int rfi = 0; rfi < Imports.reports.size(); rfi++) {
+            ReportFile rf = Imports.reports.get(rfi);
+            String id = rf.collectionDateTime + " " + rf.fileName;
+            focusFileSelectors[rfi] = new FocusFileSelector(cmpFileList, id, rfi);
+         }
+         cmpFileList.pack();
+         cmpFileList.layout();
+         trending = new Trending();
+         clearTrendSelectors();     // may be redundant
+         trendItemSelectors = new TrendItemSelector[trending.trendList.size()];
+         for (int t = 0; t < trending.trendList.size(); t++) {
+            TrendListItem tli = trending.trendList.get(t);
+            trendItemSelectors[t] = new TrendItemSelector(cmpTrendList, tli.grpName, t);
+         }         
+         cmpTrendList.setVisible(true);
+         cmpTrendList.pack();
+         cmpTrendList.layout();
+      } else {
+         MessageBox msgbox = 
+               new MessageBox(shlMain, SWT.ICON_ERROR | SWT.YES | SWT.NO);
+         msgbox.setText("You haven't selected any reports");
+         msgbox.setMessage("Do you want to retry?");
+         int ret = msgbox.open();
+         if (ret != SWT.YES) {
+            shlMain.dispose();
+            System.exit(0);
+         }
+      }
+      AppSettings.sData.importFilesFolder = impFolder;
+//      cmpFileList.update();
+   }     // loadReports
    
    void setupFileSelection() {
       OpMsgLog.LogMsg("Choose report file from above and click 'AcceptFile'\n",
             OpMsgLogger.LogLevel.PROMPT);
       btnNewFile.setEnabled(true);
-      btnAddNewFiles.setEnabled(true);
+      btnSetImportFolder.setEnabled(true);
    }
    
    static public void addToChart(TrendListItem tli, boolean show) {

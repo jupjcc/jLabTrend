@@ -18,10 +18,8 @@ import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.CellType;
 import org.apache.poi.ss.usermodel.CreationHelper;
-import org.apache.poi.ss.usermodel.DateUtil;
 import org.apache.poi.ss.usermodel.Font;
 import org.apache.poi.ss.usermodel.HorizontalAlignment;
-import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFRow;
 import org.apache.poi.xssf.usermodel.XSSFSheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -42,7 +40,7 @@ public class ReportFile implements Comparable<ReportFile> {
    static XSSFSheet importSht = null;
    static CreationHelper createHelper;
       
-   public String collectionDateTime = "none";
+   public String collectionDateTime;
    public String headerTitle = "";
    public LocalDate collectionDate;
    DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss");
@@ -61,7 +59,7 @@ public class ReportFile implements Comparable<ReportFile> {
    };
    
    public ReportFile(String fileName) {
-      // 20250105: add reading of Quest report files which are manauly prepeared from
+      // 20250105: add reading of Quest report files which are manually preeared from
       //  paper copies provied by Dr. Kocharian
       /*  20240319:
        * after monkeying around with reading and decoding 
@@ -112,7 +110,7 @@ public class ReportFile implements Comparable<ReportFile> {
                      }
                   } else if (line.contains(">-")) {
                      if (!getDateOnly) {
-                        LabTrend.readings.add(new Reading(this, new DataPoint(line)));
+                        LabTrend.Imports.readings.add(new Reading(this, new DataPoint(line)));
                      }
                   } else {
                      int boldStart = line.indexOf("<B>" + 3);
@@ -210,14 +208,14 @@ public class ReportFile implements Comparable<ReportFile> {
             d = new DataPoint(labCorpName, getCellAmt(r, 2),   // name, valStr
                                         getCellAmt(r, 3), getCellAmt(r, 4), // min, max
                                         getCellString(r, 5));  // units
-            LabTrend.readings.add(new Reading(this, d));
+            LabTrend.Imports.readings.add(new Reading(this, d));
          } else {
             String questName = getCellString(r, 1);
             if (questName != null) {
                d = new DataPoint(questName, getCellAmt(r, 2),   // name, valStr
                                             getCellAmt(r, 3), getCellAmt(r, 4), // min, max
                                             getCellString(r, 5));  // units
-               LabTrend.readings.add(new Reading(this, d));
+               LabTrend.Imports.readings.add(new Reading(this, d));
             }
          }
          
@@ -288,7 +286,7 @@ public class ReportFile implements Comparable<ReportFile> {
             }
             if (nDups == nDupsStart) {
                if (!getDateOnly) {
-                  LabTrend.readings.add(new Reading(this, newItem));
+                  LabTrend.Imports.readings.add(new Reading(this, newItem));
                   newNames.add(lineItems[0]);
                }
             }

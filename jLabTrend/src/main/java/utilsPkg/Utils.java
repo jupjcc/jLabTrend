@@ -16,6 +16,7 @@ import java.util.Comparator;
 import java.util.Date;
 import java.util.TimeZone;
 
+import org.apache.tools.ant.DirectoryScanner;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
@@ -472,6 +473,17 @@ public class Utils {
          }
       }       // thru the children
    }         // end SelectRadioButton
+   
+   /* https://learn-it-university.com/finding-files-matching-a-wildcard-string-in-java-a-step-by-step-guide/
+    */
+   static public String[] FilesFinder(String folder, String []filter) {
+      DirectoryScanner scanner = new DirectoryScanner();
+      scanner.setIncludes(filter);
+      scanner.setBasedir(folder);
+      scanner.setCaseSensitive(false);
+      scanner.scan();
+      return scanner.getIncludedFiles();
+   }
 
    static public String GetOpenFileName(Shell s,
                                         String title,      String []filterNames,

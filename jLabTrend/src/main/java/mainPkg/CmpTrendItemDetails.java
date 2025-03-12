@@ -108,16 +108,21 @@ public class CmpTrendItemDetails extends Composite {
       }  
    }
    private String fValue(String vStr) {
-      String ret = vStr;
-      if (vStr.length() == 2 && vStr.equals("--")) {
-         ret = "     -- ";
-      } else {
-         try {
-            double val = Double.parseDouble(vStr);
-            ret = String.format("%8.2f", val);
-         } catch (Exception e) {}
+      final String UNDEFINED = "     -- ";
+      try {
+         String ret = vStr;
+         if (vStr.length() == 2 && vStr.equals("--")) {
+            ret = "     -- ";
+         } else {
+            try {
+               double val = Double.parseDouble(vStr);
+               ret = String.format("%8.2f", val);
+            } catch (Exception e) {}
+         }
+         return ret;
+      } catch (Exception ne) {
+         return UNDEFINED;
       }
-      return ret;
    }
    
    private void setLineText(Reading r) {
