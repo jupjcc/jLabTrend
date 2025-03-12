@@ -94,7 +94,7 @@ import utilsPkg.Utils;
  *                
  */
 public class LabTrend extends Shell {
-   public static String PROG_ID = "jLabTrend History of Lab Results v3.0 20250311";
+   public static String PROG_ID = "jLabTrend History of Lab Results v3.0 20250312";
    final static int TAB_IMPORT_DATA = 0;
    final static int TAB_TRENDING = 1;
    final static int TAB_CHARTS = 2;
